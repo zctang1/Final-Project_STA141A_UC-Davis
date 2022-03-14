@@ -1,0 +1,218 @@
+---
+title: "Impact of midweek and weekend on COVID-19 transmission"
+author: "Zhichuan Tang"
+date: "3/14/2022"
+output: html_document
+---
+
+##  Introduction  ##
+Starting in December 2019, a novel coronavirus called COVID-19 was first identified in Wuhan, China, and swept the world within a few months. It continued to ravage human society with its strong mutability and infectivity until the cutoff of this report. This RNA virus is genetically diverse and its symptoms include, but are not limited to, fever, cough, shortness of breath, discomfort, and difficulty breathing; suspected symptoms include abdominal pain, diarrhea, and more. They also include serious and non-serious sequelae including but not limited to hearing impairment, vision impairment, mobility impairment, cortical impairment, spoken accent impairment, and sexual impairment. Some of the sequelae have been shown to be long-term, but it remains to be seen if they are permanent. Several vaccines are now available to defend against COVID-19 virus, but due to its genetic phenotype and diversity, vaccine defenses diminish with continued mutation of variants.
+
+In addition to its biological destructive power, COVID-19 has also wreaked havoc on human society. Because of its strong infectivity, countries have undergone massive screening and quarantine, curfews and other epidemic prevention efforts, which have had a significant effect but still failed to eradicate the COVID-19 virus. The non-working population and massive government investment caused severe economic damage. Large numbers of individuals lost their jobs, businesses went bankrupt, students stopped attending school, and trade was suspended. On a deeper level, large numbers of people who were isolated or still working, studying, and caring for their families during the COVID-19 pandemic also suffered from psychological stress and even mental illness.
+
+This Dataset is derived from WHO's COVID-19 global data, which includes, but is not limited to, country name, continent, daily new cases, daily deaths, and date of case reporting. This report will extract the applicable data that are relevant to this article for analysis. It is important to note that in this article and in the charts, there may be some abbreviations or code-like format names, which I will explain here.
+
+---
+
+WHO_region is shortened with Upper cased characters:
+
+- AFRO = African Region; 
+
+- AMRO = Region of the Americas; 
+
+- EMRO = Eastern Mediterranean; 
+
+- EURO = Europeean Region; 
+
+- SEARO = South-East Asia; 
+
+- WPRO = Western Pacific Region. 
+
+If "other" appears in the region, it represents a special country or region that is not classified by WHO as one of the above regions.
+
+Date_reported: date of a COVID-19 case is reported, format year-month-day
+
+Country_code: short alphabetic or numeric geographical codes
+
+Country name: name of a country that is used officially in English
+
+New_cases: number of cases on the reported date
+
+Cumulative_cases : number of cumulative cases since COVID-19 pandemic
+
+New_deaths: number of deaths on the reported date
+
+Cumulative_deaths : number of cumulative deaths since COVID-19 pandemic
+
+---
+
+In general, the transmission efficiency of COVID-19 as an infectious disease is directly linked to human activity. It is generally believed that the more human activities and interactions, the more active the virus is and the stronger the infectivity. We can assume that the usual travel and work of the general population and study will greatly accelerate the transmission efficiency. It is worth noting that different quarantine or response policies in some countries may have different effects - for example, China often uses isolation policies such as home quarantine to significantly reduce individual activity and interactions regardless of time of day. However, for the vast majority of the rest of the world, the population has a more regular schedule: weekday is chosen for work and school, while weekend is chosen for recreation or rest. These different lifestyles create a significant difference between five days of the week and two days of the week, and these differences are likely to lead to regularity in the spread of COVID-19 activity. In this paper, we examine the WHO data on report date and diagnosis at different times of the week to analyze whether weekend and midweek have an impact on the transmission of COVID-19. We hope to see that weekends have a negative effect on COVID transmission, because often testing laboratories stop testing on weekends, and government agencies stop reporting - especially to WHO. In contrast, people are also more active on the weekends and social groups start to cross over. So such an experiment is necessary.
+
+Categorizing and discussing time periods of group activity has strong practical implications. If a positive correlation is found, i.e., weekend travel or lab breaks lead to an increase in cases, then the government and the population can control the spread of COVID-19 by limiting or reducing travel. If no statistical relationship is found, then this behavior does not significantly affect the spread of COVID-19 virus. The discussion after the positive pseudo is relatively complicated, it may be that the virus itself is strong enough to spread that this level of activity change has little effect on it, or it may be that the government uploads or WHO data collection speed is very efficient, etc. In conclusion, the analysis presented in this report is of great interest to the general public, the government, and the WHO.
+
+
+
+## Background ##
+```{r,echo=FALSE,message=FALSE}
+#load everything
+library(haven)
+library(tidyverse)
+library(gridExtra)
+library(scales)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(chron)
+library(dygraphs)
+library(COVID19)
+##in case some package is missing, please use [install.packages("XXX",repos = "http://cran.us.r-project.org")] and XXX represents the name of package.
+```
+
+```{r,echo=FALSE,message=FALSE}
+#load covid dataset
+covid <- read_csv("https://covid19.who.int/WHO-COVID-19-global-data.csv")
+## notice: this data might not be the most-up-to-date dataset.
+```
+
+```{r,echo=FALSE,message=FALSE}
+#some data cleaning to select out useful data
+covid = covid %>% filter(is.na(Date_reported)!=TRUE & is.na(Country)!=TRUE & is.na(New_cases)!=TRUE & is.na(Cumulative_cases)!=TRUE)
+
+
+#select out the most useful data column for further analysis
+##added WHO_region afterwards for further uses
+#rate <- Cumulative_deaths/Cumulative_cases
+```
+
+```{r,echo=FALSE,message=FALSE}
+covid<-covid[c("Date_reported", "Country", "New_cases", "Cumulative_cases", "WHO_region", "New_deaths")]
+```
+The source of the data is the WHO COVID-19 dataset, where all data are taken from individual government uploads and reports on COVID-19 patients. The dataset is based on a sample of the entire human population, with a subset of patients with COVID-19 being extracted for data analysis and documentation purposes. Please note that this data may be inaccurate due to privacy policies of some countries, domestic political and economic conditions, etc. Many data analysts have extracted a large amount of data from different directions and made excellent analyses, and there are many packages in R language related to them, including "COVID19". However, most of the analyses and packages on R and Github use data from JHU or other institutions, and the use of WHO data is very low.
+
+```{r, echo=FALSE, message=FALSE}
+#creat new variable called weekend
+wend<-is.weekend(covid$Date_reported)
+
+#build new column in covid dataset
+covid<- covid %>%
+  add_column("endornot"= if_else(wend, TRUE, FALSE)) 
+```
+```{r, echo=FALSE, message=FALSE}
+#get the new case
+newcases<-covid %>%
+          group_by(Date_reported,WHO_region) %>%
+          summarise(sumnewcases=sum(New_cases),
+                    endornot=unique(endornot))
+```
+
+
+```{r,echo=FALSE,message=FALSE}
+#plot a graph on new cases and date
+(linegraph<- newcases %>% filter(Date_reported>= "2020-07-01", Date_reported<= "2022-02-15") %>% 
+  mutate(Date=as.Date(Date_reported)) %>%
+  ggplot(aes(x=Date,y=sumnewcases,by=WHO_region)) +
+  geom_line(aes(color=WHO_region)) +
+  theme(legend.position ='right')) 
+```
+
+<p style="text-indent:32px;"><span style="color:red;">*The above graph is the sum of new cases of COVID-19 for different WHO regions from 2020.07 to 2022.01.*</span>
+
+In contrast, many previous analyses, such as "Review on the coronavirus disease (COVID-19) pandemic: Its outbreak and current status" by Dalia Almaghaslah et al. (https://onlinelibrary.wiley.com/doi/10.1111/ijcp. 13637) is also very exciting, but with the rapid prevalence and change of COVID variants, some of the information and conclusions in these reports are no longer completely accurate.
+
+Correspondingly, many scientists have contributed excellent analysis and explanations, such as Marcelo Ponce's "covid19.analytics: An R Package to Obtain, Analyze and Visualize Data from
+the Coronavirus Disease Pandemic” (https://arxiv.org/pdf/2009.01091.pdf).
+
+Most relevant to our study is the same study on weekend data. For example, "A closer look at the weekend effect and COVID-19 mortalities" by Hany Aly (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7990432/) etc.
+
+As we mentioned before, a large number of reports are relatively outdated, and the current report relies heavily on data provided by the Johns Hopkins School, so the report using other official data makes more sense.
+
+## Descriptive analysis ##
+
+We may check the ommited or empty variables, rows or columns.
+```{r}
+which(is.na(covid))
+```
+This reflects that there is no missing variables in this dataset, and we should not be worried about incomplete variables in this case.
+
+There are many data, and much more possible data variables in this dataset. However, for this reasearch use and for the further convenience, I would only use several data. "Data_reported", "Country", "New_cases", "Cumulative_cases", "WHO_region", "New_deaths" will be used to produce analysis.
+- detail for those variables please check part "Background"
+
+```{r,message=FALSE}
+covid<-covid[c("Date_reported", "Country", "New_cases", "Cumulative_cases", "WHO_region", "New_deaths")]
+```
+
+```{r,echo=FALSE,message=FALSE}
+summary(covid)
+```
+This table runs from January 3, 2020 to March 12, 2022. As seen in the data, the world average is 2387 infections per day, with a peak of 1294746 per day. The total number of infections to date is 78739443.
+
+```{r}
+var(covid)
+```
+
+This reflects the variance of the dataset covid, and indicates the variances of each value. It is obvious that it is not a very ideal move to try to test out variances. So there will not be Standard Deviation tested.
+
+
+## Inferential analysis ##
+
+First, because it is verifying the relationship between weekend or midweek for COVID propagation, we have to create a new variable. This new variable is called "endornot" and represents whether a day is a weekend or a midweek. It is a Binomial variable to distinguish and screen different categories of dates.
+
+```{r, message=FALSE}
+#creat new variable called weekend
+wend<-is.weekend(covid$Date_reported)
+```
+
+```{r, message=FALSE}
+#build new column in covid dataset
+covid<- covid %>%
+  add_column("endornot"= if_else(wend, TRUE, FALSE)) 
+```
+
+We will use Two-way ANOVA to have a first glance of the data. In this model, the nnull hypothesis would be the case that the weekends in different regions can affect the number of daily reported new cases. Alternatively, Ha means that H0 is not correct.
+```{r, echo = FALSE, message=FALSE}
+model1 = aov(sumnewcases~WHO_region+ endornot, data=newcases)
+summary(model1)
+#H0 = weekends affect daily new cases
+#Ha = H0 not true
+```
+From the output of this ANOVA, WHO_region explains the most significant variances in this model. The p-value is less than 0.001. However, the endornot, has a much larger p-value, with value greater than 0.1 of significance level. Thus, we can conclude that there is difference for these two variables. However, most of its variation depends on variable WHO_region instead of endornot. 
+
+Moreover, we discover whether these two variables, WHO_region and endornot, may have interactions between variables.
+```{r,echo=FALSE}
+interaction <- aov(sumnewcases~WHO_region*endornot, data = newcases)
+
+summary(interaction)
+```
+From the data we can see that this data is very similiar to the last ANOVA data we modeled. So there is no strong effect of interaction. The p-value is way bigger than our choice.
+
+We may also check the reported date and the endornot variable to the impact of new daily cases. We still hold the same Null and Alternative Hypothesis from the very first Two-way ANOVA.
+```{r, echo = FALSE, message=FALSE}
+model1 = aov(sumnewcases~Date_reported+ endornot, data=newcases)
+summary(model1)
+```
+Still, in this case, the P-value for Date_reported is much less than the significance level, which is 0.001. And the endornot is still big and this implies the endornot has no or say very little impact on the date that is reported.
+
+## Model Diagnostics ##
+
+Using sequential interaction and non-interaction Two-way ANOVAs, we determined that endornot had little or no association with new cases per day, or was statistically insignificant. We obtained the same conclusion for several correlated ANOVAs, regardless of whether they had interactions with other variables.
+
+```{r,echo=FALSE}
+qqnorm(covid$Cumulative_cases, pch = 1, frame = FALSE)
+```
+We further explain the shortcomings and possible problems in our model by plotting the QQ plot. Heavy-tailed residual distributions can be a problem for our models, when the variation is greater than the normal This might indicate that we underestimated the variance of the model. 
+
+I think that a better refinement of the data is needed to achieve more statistically significant data and goals. This will be further clarified in Discussion.
+
+## Conclusion ##
+
+The analysis of the data in this report allows us to conclude that the number of new cases under this group of WHO dataset does not have any relationship with whether it is a weekend or not. The variation was more closely related to time of day and region. Similarly, there is no strong interaction between time of week and time and region, and we can conclude that midweek or weekend has little effect on the rate of transmission of new coronaviruses and is not statistically significant. However, this data set and analysis leaves great room for shortcomings and improvement. The elaboration of the QQ plot also provides a better understanding of possible problems with the data and possible imperfections of the model.
+
+Relatively speaking, its relevance is much greater than its statistical or even medical significance. Basically the different ways that individual humans act each week do not affect the rate of transmission of the virus, and then the masses are unnecessarily extra concerned. In fact there may be a factual basis for this. In general, the most contagious places are cities or areas with high population density. People generally use subways or buses to travel, in which case the movement of people is frequent and intense. In contrast, residents of large cities are less likely to buy large housing units because of high housing prices, and thus prefer to go out and about in their free time. So the frequency or efficiency of travel on weekends and weekdays may be close to equal overall.
+
+This report has a small amount of extracted data and does not fully test all ANOVA's. Relatively speaking the WHO data is not very accurate either. Government underreporting, furloughs, individual misreporting, and underreporting. The data may be inaccurate due to fights and disputes in certain regions. Therefore, it is recommended that further screening of countries and regions be conducted again and all non-outbreak period infections be excluded to further determine the relationship between weekday breaks and COVID-19 transmission.
+
+Another important issue is that this article assembles all variants to be studied in chronological order. This is medically unacceptable. Different variants possess a high capacity for reproduction and mutation with active genetic RNA. Therefore, it is recommended to split the time period and to perform regional active strain analysis and testing to differentiate the treatment of different viral variants in different regions.
+
+---
+
+
